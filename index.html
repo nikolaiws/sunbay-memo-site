@@ -567,6 +567,10 @@ function acvNoteText(tier, invoices, acvToday) {
   const k = acvToday / 1000;
   return `ACV here is the ${tier[0].toUpperCase() + tier.slice(1)} tier at ${invoices} invoices, so the TAM is a ceiling; today's blended ACV is about €${Number.isInteger(k) ? k : k.toFixed(1)}k.`;
 }
+// The economics widget drives the returns widget's ACV only when a reader moves economics off the default preset; a page
+// load, a shared link (returns carries its own ACV) and a click on the default preset or Reset push nothing.
+function shouldPushAcv({ userChange, isDefaultPreset }) { return !!userChange && !isDefaultPreset; }
+function snapToStep(v, step, min = 0) { return Number((min + Math.round((v - min) / step) * step).toFixed(10)); }
 function countLabel(n) { return Number.isInteger(n) ? String(n) : `${Math.floor(n)} to ${Math.floor(n) + 1}`; }
 
 function competitorsFilter(rows, f) {
@@ -760,7 +764,7 @@ function mountReturns(root, S, fmt) {
   cs.fund = control('rt-fund', 'Fund size', { min: 20000000, max: 250000000, step: 5000000, value: state.fund, fmtv: fmt.usd, onInput: (v, c) => { state.fund = v; render(c); } });
   cs.mult = control('rt-mult', 'Exit multiple of ARR', { min: 3, max: 12, step: 0.5, value: exitMultiple, fmtv: (x) => x + 'x', onInput: (v, c) => { exitMultiple = v; render(c); } });
   cs.floor = control('rt-floor', `Your bar: expected multiple on the position (the fund's is ${BAR}x gross per line)`, { min: 1.5, max: 6, step: 0.1, value: floor, fmtv: (x) => x + 'x', onInput: (v, c) => { floor = v; render(c); } });
-  cs.acv = control('rt-acv', `ACV for the customers-needed line (today's ${fmt.eur(ACV0)}; follows the economics tier once you change it)`, { min: 3000, max: 30000, step: 500, value: acv, fmtv: (x) => fmt.eur(x), onInput: (v, c) => { acv = v; render(c); } });
+  cs.acv = control('rt-acv', `ACV for the customers-needed line (today's ${fmt.eur(ACV0)}; follows the economics tier once you change it)`, { min: 3000, max: 30000, step: 1, value: acv, fmtv: (x) => fmt.eur(x), onInput: (v, c) => { acv = v; render(c); } });
   state.rounds.forEach((r, i) => { cs['d' + i] = control('rt-d' + i, `${r.name} dilution`, { min: 0, max: 0.4, step: 0.01, value: r.dilution, fmtv: (x) => fmt.pct(x), onInput: (v, c) => { state.rounds[i].dilution = v; render(c); } }); });
   state.scenarios.forEach((s, i) => {
     if (i === 0) return;
@@ -770,7 +774,7 @@ function mountReturns(root, S, fmt) {
       state.scenarios[i].p = capped; if (capped !== v) cs['p' + i].set(capped);
       const rest = state.scenarios.slice(1).reduce((a, x) => a + x.p, 0); state.scenarios[0].p = Math.max(0, 1 - rest); setText(root, 'p0', fmt.pct(state.scenarios[0].p)); render(c); } });
   });
-  document.addEventListener('memo:acv', (e) => { const v = Number(e.detail); if (Number.isFinite(v) && v > 0) { acv = Math.round(v); cs.acv.set(acv); render(false); } });
+  document.addEventListener('memo:acv', (e) => { const v = e.detail == null ? ACV0 : Number(e.detail); if (Number.isFinite(v) && v > 0) { acv = Math.round(v); cs.acv.set(acv); render(false); } });
   for (const k of ['cheque', 'post', 'fund', 'd0', 'd1', 'd2', 'x1', 'p1', 'x2', 'p2', 'x3', 'p3', 'mult', 'acv', 'floor']) if (cs[k]) ctr.append(cs[k]);
   ctr.append(h('p', { class: 'small', style: 'grid-column: 1 / -1; margin: 0' }, 'Write-off probability is the remainder: ', h('b', { 'data-k': 'p0' }, fmt.pct(state.scenarios[0].p)), '. The three sliders are capped so the four cases sum to 100%. Exits after one, two and three rounds respectively.'));
   function syncControls() {
@@ -819,7 +823,7 @@ function mountEconomics(root, S, fmt) {
   const whichPreset = () => { const segsBase = segs.every((sg, i) => ['firms', 'b2b_share', 'fit_share'].every((k) => Math.abs(sg[k] - T.segments[i][k]) < 1e-9)); if (!segsBase || capture !== T.capture_share || coc !== E.cost_of_capital_pct) return null;
     return Object.keys(presets).find((k) => KEYS.every((key) => state[key] === presets[k][key])) || null; };
   for (const [k, p] of Object.entries(presets)) pres.append(h('button', { type: 'button', 'data-preset': k, onclick: () => { name = k; state = { ...presets[k] }; sync(); render(true); mark(k); } }, p.label));
-  pres.append(h('button', { type: 'button', onclick: () => { name = E.default; state = { ...presets[name] }; segs = JSON.parse(JSON.stringify(T.segments)); capture = T.capture_share; coc = E.cost_of_capital_pct; sync(); render(true); } }, 'Reset'));
+  pres.append(h('button', { type: 'button', onclick: () => { name = E.default; state = { ...presets[name] }; segs = JSON.parse(JSON.stringify(T.segments)); capture = T.capture_share; coc = E.cost_of_capital_pct; sync(); render(true); document.dispatchEvent(new CustomEvent('memo:acv', { detail: null })); } }, 'Reset'));
   ctr.before(pres); mark(name);
   const cs = {};
   const add = (k, label, opts) => { cs[k] = control('ec-' + k, label, { ...opts, value: state[k], onInput: (v, c) => { state[k] = v; render(c); } }); ctr.append(cs[k]); };
@@ -870,10 +874,11 @@ function mountEconomics(root, S, fmt) {
     verdict.textContent = ratio >= 5 ? `At ${ratio.toFixed(1)}x value to price the customer is under-charged: room for a take rate or a higher tier. ` : ratio >= 2 ? `At ${ratio.toFixed(1)}x value to price the sale is easy and the price is fair. ` : `At ${ratio.toFixed(1)}x value to price the sale gets hard; this customer is below ${short}'s sweet spot. `;
     verdict.textContent += t.tam >= 1e9 ? `The roll-up clears €1B of TAM; the question becomes capture.` : `A ${fmt.eur(t.tam / 1e6, 0)}M TAM at this ACV is a strong company, not a fund returner; lifting ACV or the fit shares is what changes the answer.`;
     if (commit) hashWrite('econ', { state, segs, capture, coc });
-    if (live) document.dispatchEvent(new CustomEvent('memo:acv', { detail: p.annual }));
+    const d = presets[E.default]; const priceIsDefault = state.invoices_month === d.invoices_month && state.tier === d.tier;  // segment or DSO edits move the TAM, not the ACV
+    if (shouldPushAcv({ userChange: live && commit !== undefined, isDefaultPreset: priceIsDefault })) document.dispatchEvent(new CustomEvent('memo:acv', { detail: p.annual }));
   }
-  let live = !!saved;  // a link that carries an economics scenario also drives the returns ACV on load
-  sync(); render(false); live = true;
+  let live = false;  // the returns widget carries its own ACV in a shared link; economics pushes only on a reader's change
+  sync(); render(); live = true;
 }
 
 // ---------- competitive map ----------
@@ -1020,8 +1025,10 @@ function mountTraction(root, S, fmt) {
   cs.basic = control('tr-basic', 'Basic share of customers', { min: 0, max: 1, step: 0.05, value: mix.basic, fmtv: (x) => fmt.pct(x), onInput: (v, c) => { mix.basic = v; mix.standard = Math.max(0, Math.min(1 - v, mix.standard)); mix.pro = Math.max(0, 1 - mix.basic - mix.standard); cs.standard.set(mix.standard); render(c); } });
   cs.standard = control('tr-standard', 'Standard share (Pro is the remainder)', { min: 0, max: 1, step: 0.05, value: mix.standard, fmtv: (x) => fmt.pct(x), onInput: (v, c) => { mix.standard = Math.min(v, Math.round((1 - mix.basic) * 100) / 100); if (mix.standard !== v) cs.standard.set(mix.standard); mix.pro = Math.max(0, 1 - mix.basic - mix.standard); render(c); } });
   cs.inv = control('tr-inv', 'Average invoices a month per customer', { min: 100, max: 1500, step: 10, value: inv, fmtv: fmt.int, onInput: (v, c) => { inv = v; render(c); } });
-  cs.growth = control('tr-growth', 'Benchmark monthly growth', { min: 0.02, max: 0.2, step: 0.005, value: growth, fmtv: (x) => fmt.pct(x, 1), onInput: (v, c) => { growth = v; render(c); } });
+  cs.growth = control('tr-growth', 'Benchmark monthly growth', { min: 0.02, max: 0.2, step: 0.001, value: growth, fmtv: (x) => fmt.pct(x, 1), onInput: (v, c) => { growth = v; render(c); } });
   ctr.append(cs.basic, cs.standard, cs.inv, cs.growth);
+  const tpres = h('div', { class: 'presets' }, h('button', { type: 'button', onclick: () => { mix = { ...T.tier_mix }; inv = T.avg_invoices; growth = T.benchmark.monthly_growth_pct; cs.basic.set(mix.basic); cs.standard.set(mix.standard); cs.inv.set(inv); cs.growth.set(growth); render(true); } }, 'Reset to the memo'));
+  ctr.before(tpres);
   const verdict = h('p', { class: 'small', id: 'traction-verdict' }); chartEl.after(verdict);
   const tg = T.target || null;
   function render(commit) {
@@ -1042,7 +1049,7 @@ function mountTraction(root, S, fmt) {
 
 const MemoWidgets = { returns: { mount: mountReturns }, economics: { mount: mountEconomics }, competitors: { mount: mountCompetitors }, traction: { mount: mountTraction } };
 
-return { returnsCompute, economicsCompute, DEFAULT_FIT, fitScore, polandFit, frNoteText, acvNoteText, countLabel, competitorsFilter, tractionCompute, parseHuman, CHART_SHORT, competitorsChart, MemoWidgets };
+return { returnsCompute, economicsCompute, DEFAULT_FIT, fitScore, polandFit, frNoteText, acvNoteText, shouldPushAcv, snapToStep, countLabel, competitorsFilter, tractionCompute, parseHuman, CHART_SHORT, competitorsChart, MemoWidgets };
 })();
 window.MemoModels = Models;
 window.MemoWidgets = Widgets.MemoWidgets || {};
