@@ -1,0 +1,16 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Memo runs</title>
+<style>
+:root { --bg: #fbfaf7; --fg: #1d1d1b; --muted: #6b6b66; --rule: #ddd9d0; --ok: #1f6b3a; --bad: #9a2a2a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --bg: #121614; --fg: #ece9e2; --muted: #a8a59d; --rule: #33382f; --ok: #7fd09a; --bad: #e08a8a; } }
+body { margin: 0; padding: 24px 16px; background: var(--bg); color: var(--fg); font: 15px/1.5 -apple-system, "Segoe UI", sans-serif; }
+main { max-width: 1100px; margin: 0 auto; } h1 { font-size: 1.5rem; margin: 0 0 .3rem; } p { color: var(--muted); max-width: 70ch; }
+.wrap { overflow-x: auto; } table { border-collapse: collapse; width: 100%; font-size: .9rem; } th, td { text-align: left; padding: .45rem .6rem; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-size: .75rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); } td.pass { color: var(--ok); } td.fail { color: var(--bad); } .draft { font-size: .7rem; border: 1px solid var(--rule); border-radius: 3px; padding: 0 .3rem; color: var(--muted); }
+a { color: inherit; }
+</style></head><body><main>
+<h1>Memo runs</h1>
+<p>Every company a memo was written for: the analyst's call and routing, the model's expected multiple against the fund's bar, the three gates every page passes (the validator, the citation checker, the browser check), and Kev's second opinion: a local 0.8B decision model that reads the memo and answers whether to take a second meeting. A draft is a factory output no analyst has signed.</p>
+<div class="wrap"><table><tr><th>Company</th><th>As of</th><th>Call</th><th>Routing</th><th>Expected / bar</th><th>Validator</th><th>Citations</th><th>Browser check</th><th>Kev: meeting</th><th>Kev routing</th><th>Kev N+2S+E</th></tr><tr><td><a href="index.html">Sunbay.io</a></td><td>2026-10-21</td><td>Pass</td><td>TRACK</td><td>3.6x / 4.3x</td><td class=pass>pass</td><td>1 miss</td><td class=pass>pass</td><td>no (47%)</td><td>PASS</td><td>8.9</td></tr><tr><td><a href="../companies/sunbay.io/site/index.html">Sunbay</a> <span class=draft>draft</span></td><td>2026-10-22</td><td>Pass</td><td>MEET</td><td>1.8x / 4.3x</td><td class=pass>pass</td><td>0 misses</td><td class=pass>pass</td><td>yes (68%)</td><td>PASS</td><td>9.0</td></tr></table></div>
+<p><a href="index.html">Back to the Sunbay memo</a></p>
+</main></body></html>
